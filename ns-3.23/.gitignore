@@ -3,3 +3,5 @@ build
 # Ignore trace files
 *.tr
 *.pcap
+# Ignore VIM swap files
+.*.sw*
