@@ -102,6 +102,9 @@ main (int argc, char *argv[])
 //
   uint16_t port = 9;  // well-known echo port number
   RequestResponseServerHelper server (port);
+  // Set packet size as in the client app
+  uint32_t responseSize = 1024;
+  server.SetAttribute ("PacketSize", UintegerValue (responseSize));
   ApplicationContainer apps = server.Install (n.Get (1));
   apps.Start (Seconds (1.0));
   apps.Stop (Seconds (10.0));

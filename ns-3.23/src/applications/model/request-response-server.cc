@@ -49,6 +49,11 @@ RequestResponseServer::GetTypeId (void)
                    UintegerValue (9),
                    MakeUintegerAccessor (&RequestResponseServer::m_port),
                    MakeUintegerChecker<uint16_t> ())
+    .AddAttribute ("PacketSize", "Size of echo data in outbound packets",
+                   UintegerValue (100),
+                   MakeUintegerAccessor (&RequestResponseServer::SetDataSize,
+                                         &RequestResponseServer::GetDataSize),
+                   MakeUintegerChecker<uint32_t> ())
   ;
   return tid;
 }
@@ -56,6 +61,9 @@ RequestResponseServer::GetTypeId (void)
 RequestResponseServer::RequestResponseServer ()
 {
   NS_LOG_FUNCTION (this);
+  // Initialize m_data and m_dataSize
+  m_data = 0;
+  m_dataSize = 0;
 }
 
 RequestResponseServer::~RequestResponseServer()
@@ -63,6 +71,10 @@ RequestResponseServer::~RequestResponseServer()
   NS_LOG_FUNCTION (this);
   m_socket = 0;
   m_socket6 = 0;
+  // Initialize m_data and m_dataSize
+  delete [] m_data;
+  m_data = 0;
+  m_dataSize = 0;
 }
 
 void
@@ -165,8 +177,12 @@ RequestResponseServer::HandleRead (Ptr<Socket> socket)
       packet->RemoveAllPacketTags ();
       packet->RemoveAllByteTags ();
 
-      NS_LOG_LOGIC ("Echoing packet");
-      socket->SendTo (packet, 0, from);
+      //socket->SendTo (packet, 0, from); // old line, changed to follow the HOWTO
+      NS_LOG_LOGIC ("Responding");
+      // Send a packet reflecting the m_size attribute
+      Ptr<Packet> p = Create<Packet> (m_size);
+      socket->SendTo (p, 0, from);
+
 
       if (InetSocketAddress::IsMatchingType (from))
         {
@@ -181,6 +197,29 @@ RequestResponseServer::HandleRead (Ptr<Socket> socket)
                        Inet6SocketAddress::ConvertFrom (from).GetPort ());
         }
     }
+}
+
+void 
+RequestResponseServer::SetDataSize (uint32_t dataSize)
+{
+  NS_LOG_FUNCTION (this << dataSize);
+
+  //
+  // If the server is setting the echo packet data size this way, we infer
+  // that she doesn't care about the contents of the packet at all, so 
+  // neither will we.
+  //
+  delete [] m_data;
+  m_data = 0;
+  m_dataSize = 0;
+  m_size = dataSize;
+}
+
+uint32_t 
+RequestResponseServer::GetDataSize (void) const
+{
+  NS_LOG_FUNCTION (this);
+  return m_size;
 }
 
 } // Namespace ns3
