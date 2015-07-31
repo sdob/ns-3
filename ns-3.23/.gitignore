@@ -7,3 +7,5 @@ build
 .*.sw*
 # locks
 .lock*
+# ignore compiled python
+*.pyc
