@@ -20,9 +20,6 @@ def build(bld):
         # request-response
         'model/request-response-client.cc',
         'model/request-response-server.cc',
-        # basic random gossip
-        'model/basic-random-gossip-client.cc',
-        'model/basic-random-gossip-server.cc',
         'model/v4ping.cc',
         'model/application-packet-probe.cc',
         'helper/bulk-send-helper.cc',
@@ -33,8 +30,6 @@ def build(bld):
         'helper/udp-echo-helper.cc',
         # request-response
         'helper/request-response-helper.cc',
-        # basic random gossip
-        'helper/basic-random-gossip-helper.cc',
         'helper/v4ping-helper.cc',
         'helper/radvd-helper.cc',
         ]
@@ -64,9 +59,6 @@ def build(bld):
         # request-response
         'model/request-response-client.h',
         'model/request-response-server.h',
-        # basic random gossip
-        'model/basic-random-gossip-client.h',
-        'model/basic-random-gossip-server.h',
         'model/v4ping.h',
         'model/application-packet-probe.h',
         'helper/bulk-send-helper.h',
@@ -77,8 +69,6 @@ def build(bld):
         'helper/udp-echo-helper.h',
         # request-response
         'helper/request-response-helper.h',
-        # basic random gossip
-        'helper/basic-random-gossip-helper.h',
         'helper/v4ping-helper.h',
         'helper/radvd-helper.h',
         ]
