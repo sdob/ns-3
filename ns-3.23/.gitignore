@@ -5,3 +5,5 @@ build
 *.pcap
 # Ignore VIM swap files
 .*.sw*
+# locks
+.lock*
