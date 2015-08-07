@@ -310,8 +310,11 @@ RequestResponseClient::Send (void)
   // call to the trace sinks before the packet is actually sent,
   // so that tags added to the packet can be sent as well
   m_txTrace (p);
-  m_socket->Send (p);
 
+
+  // Halle frickin lujah
+  m_socket->Connect (InetSocketAddress (Ipv4Address::ConvertFrom(m_peerAddress), m_peerPort));
+  m_socket->Send (p);
   ++m_sent;
 
   if (Ipv4Address::IsMatchingType (m_peerAddress))

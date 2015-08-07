@@ -35,6 +35,12 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("RequestResponseExample");
 
+  void handler (ApplicationContainer apps) {
+    NS_LOG_INFO("handler called");
+    Ptr<Application> app = apps.Get(0);
+    NS_LOG_INFO(app);
+  }
+
 int 
 main (int argc, char *argv[])
 {
@@ -47,6 +53,9 @@ main (int argc, char *argv[])
   LogComponentEnable ("RequestResponseClientApplication", LOG_LEVEL_ALL);
   LogComponentEnable ("RequestResponseServerApplication", LOG_LEVEL_ALL);
 #endif
+  LogComponentEnable ("RequestResponseExample", LOG_LEVEL_INFO);
+  LogComponentEnable ("RequestResponseClientApplication", LOG_LEVEL_INFO);
+  LogComponentEnable ("RequestResponseServerApplication", LOG_LEVEL_INFO);
 //
 // Allow the user to override any of the defaults and the above Bind() at
 // run-time, via command-line arguments
@@ -109,6 +118,20 @@ main (int argc, char *argv[])
   apps.Start (Seconds (1.0));
   apps.Stop (Seconds (10.0));
 
+
+//
+// Create a second RequestResponseServer application on node two.
+//
+
+  //uint16_t port = 9;
+  //RequestResponseServerHelper server (port);
+  // Set packet size as in the client app
+  //uint32_t responseSize = 1024;
+  //server.SetAttribute ("PacketSize", UintegerValue (responseSize));
+  ApplicationContainer apps2 = server.Install (n.Get (2));
+  apps2.Start (Seconds (1.0));
+  apps2.Stop (Seconds (10.0));
+
 //
 // Create a RequestResponseClient application to send UDP datagrams from node zero to
 // node one.
@@ -120,9 +143,10 @@ main (int argc, char *argv[])
   client.SetAttribute ("MaxPackets", UintegerValue (maxPacketCount));
   client.SetAttribute ("Interval", TimeValue (interPacketInterval));
   client.SetAttribute ("PacketSize", UintegerValue (packetSize));
-  apps = client.Install (n.Get (0));
-  apps.Start (Seconds (2.0));
-  apps.Stop (Seconds (10.0));
+  ApplicationContainer clientApps = client.Install (n.Get (0));
+  clientApps = client.Install (n.Get (0));
+  clientApps.Start (Seconds (2.0));
+  clientApps.Stop (Seconds (10.0));
 
 #if 0
 //
@@ -140,6 +164,12 @@ main (int argc, char *argv[])
   AsciiTraceHelper ascii;
   csma.EnableAsciiAll (ascii.CreateFileStream ("request-response.tr"));
   csma.EnablePcapAll ("request-response", false);
+
+
+//
+// Schedule a callback
+//
+  Simulator::Schedule(Seconds(10), &handler, apps);
 
 //
 // Now, do the actual simulation.
