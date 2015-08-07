@@ -29,8 +29,14 @@
 #include "ns3/socket-factory.h"
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
+#include "ns3/double.h"
+#include "ns3/ipv4-interface-container.h"
+#include "ns3/random-variable-stream.h"
 
 #include "basic-gossip-server.h"
+
+#include <sstream>
+#include <math.h>
 
 namespace ns3 {
 
@@ -54,6 +60,22 @@ BasicGossipServer::GetTypeId (void)
                    MakeUintegerAccessor (&BasicGossipServer::SetDataSize,
                                          &BasicGossipServer::GetDataSize),
                    MakeUintegerChecker<uint32_t> ())
+    .AddAttribute ("MaxPackets", "The maximum number of packets the application will send",
+                   UintegerValue (100),
+                   MakeUintegerAccessor (&BasicGossipServer::m_count),
+                   MakeUintegerChecker<uint32_t> ())
+    .AddAttribute ("Interval", "The time to wait between packets",
+                   TimeValue (Seconds (1.0)),
+                   MakeTimeAccessor (&BasicGossipServer::m_interval),
+                   MakeTimeChecker ())
+    .AddAttribute ("InitialEstimate", "The initial estimate the node is holding",
+                   DoubleValue (0.0),
+                   MakeDoubleAccessor (&BasicGossipServer::m_estimate),
+                   MakeDoubleChecker<double> ())
+    .AddAttribute("Epsilon", "The minimum change in estimate for a node to continue gossip",
+                  DoubleValue (pow(10, -6)),
+                  MakeDoubleAccessor (&BasicGossipServer::m_epsilon),
+                  MakeDoubleChecker<double> ())
   ;
   return tid;
 }
@@ -64,6 +86,8 @@ BasicGossipServer::BasicGossipServer ()
   // Initialize m_data and m_dataSize
   m_data = 0;
   m_dataSize = 0;
+  m_sendEvent = EventId ();
+  m_sent = 0; // number of packets sent
 }
 
 BasicGossipServer::~BasicGossipServer()
@@ -71,7 +95,6 @@ BasicGossipServer::~BasicGossipServer()
   NS_LOG_FUNCTION (this);
   m_socket = 0;
   m_socket6 = 0;
-  // Initialize m_data and m_dataSize
   delete [] m_data;
   m_data = 0;
   m_dataSize = 0;
@@ -84,6 +107,82 @@ BasicGossipServer::DoDispose (void)
   Application::DoDispose ();
 }
 
+void
+BasicGossipServer::ScheduleTransmit (Time dt)
+{
+  NS_LOG_FUNCTION (this << dt);
+  // TODO: implement this
+  m_sendEvent = Simulator::Schedule (dt, &BasicGossipServer::Send, this);
+}
+
+void
+BasicGossipServer::Send (void)
+{
+  NS_LOG_FUNCTION (this);
+  NS_ASSERT (m_sendEvent.IsExpired ());
+
+  // Choose a random element of the interfaces vector --- assumes that there
+  // are at least two interfaces
+  // TODO: introduce some error checking in case somebody does something stupid
+  // and tries to run the experiment with only one node
+  Ptr<UniformRandomVariable> x = CreateObject<UniformRandomVariable> ();
+  x->SetAttribute ("Min", DoubleValue(0));
+  x->SetAttribute ("Max", DoubleValue(m_interfaces.GetN() - 1)); // range is [min, max) exclusive for doubles 
+  int index = x->GetInteger ();
+  while (m_interfaces.GetAddress(index) == m_own_address) {
+    index = x->GetInteger ();
+  }
+  Address dest = m_interfaces.GetAddress(index);
+
+  // Now we've got an address to send to, let's build a packet
+  Ptr<Packet> p;
+  double msg = m_estimate;
+  m_dataSize = sizeof(msg);
+  std::stringstream s;
+  s << msg;
+  std::string fill = s.str ();
+  uint32_t dataSize = fill.size() + 1;
+  if (dataSize != m_dataSize) {
+    delete [] m_data;
+    m_data = new uint8_t [dataSize];
+    m_dataSize = dataSize;
+  }
+  memcpy(m_data, s.str().c_str(), m_dataSize);
+  p = Create<Packet> (m_data, m_dataSize);
+
+  // Create a socket and fire off the packet
+  // TODO: I don't think this a great idea, since port numbers seem to keep going up
+  TypeId tid = TypeId::LookupByName("ns3::UdpSocketFactory");
+  m_socket_send = Socket::CreateSocket (GetNode (), tid);
+  m_socket_send->Bind();
+  m_socket_send->Connect (InetSocketAddress(Ipv4Address::ConvertFrom(dest), m_port));
+  m_socket_send->Send(p);
+
+  NS_LOG_INFO("At time " << Simulator::Now ().GetSeconds () << "s node at " << Ipv4Address::ConvertFrom(m_own_address) << " sent to " <<
+      Ipv4Address::ConvertFrom (dest) << " port " << m_port);
+
+  ++m_sent;
+  // If we haven't hit the maximum number of packets to be sent, then schedule another one
+  if (m_sent < m_count)
+    {
+      ScheduleTransmit (m_interval);
+    }
+}
+
+void
+BasicGossipServer::SetNeighbours (Ipv4InterfaceContainer interfaces)
+{
+  NS_LOG_FUNCTION (this);
+  m_interfaces = interfaces;
+}
+
+void
+BasicGossipServer::SetOwnAddress (Address address)
+{
+  m_own_address = address;
+  NS_LOG_FUNCTION(this << m_own_address);
+}
+
 void 
 BasicGossipServer::StartApplication (void)
 {
@@ -93,6 +192,8 @@ BasicGossipServer::StartApplication (void)
     {
       TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
       m_socket = Socket::CreateSocket (GetNode (), tid);
+      //Ipv4Address any = Ipv4Address::GetAny ();
+      //NS_LOG_INFO("got address: " << any);
       InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), m_port);
       m_socket->Bind (local);
       if (addressUtils::IsMulticast (m_local))
@@ -133,6 +234,9 @@ BasicGossipServer::StartApplication (void)
 
   m_socket->SetRecvCallback (MakeCallback (&BasicGossipServer::HandleRead, this));
   m_socket6->SetRecvCallback (MakeCallback (&BasicGossipServer::HandleRead, this));
+
+  // Schedule a transmission
+  ScheduleTransmit (Seconds (0.));
 }
 
 void 
@@ -150,6 +254,8 @@ BasicGossipServer::StopApplication ()
       m_socket6->Close ();
       m_socket6->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
     }
+
+  Simulator::Cancel (m_sendEvent);
 }
 
 void 
@@ -177,11 +283,13 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
       packet->RemoveAllPacketTags ();
       packet->RemoveAllByteTags ();
 
-      //socket->SendTo (packet, 0, from); // old line, changed to follow the HOWTO
-      NS_LOG_LOGIC ("Responding");
+      //NS_LOG_FUNCTION (this << packet);
+      //NS_LOG_INFO("Packet looks like: " << packet->ToString());
+
       // Send a packet reflecting the m_size attribute
       Ptr<Packet> p = Create<Packet> (m_size);
       socket->SendTo (p, 0, from);
+      //NS_LOG_FUNCTION(this << result);
 
 
       if (InetSocketAddress::IsMatchingType (from))

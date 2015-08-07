@@ -23,6 +23,7 @@
 #include "ns3/event-id.h"
 #include "ns3/ptr.h"
 #include "ns3/address.h"
+#include "ns3/ipv4-interface-container.h"
 
 namespace ns3 {
 
@@ -51,6 +52,16 @@ public:
   BasicGossipServer ();
   virtual ~BasicGossipServer ();
 
+  /**
+   * \brief set the list of addresses to which this node can send
+   */
+  void SetNeighbours (Ipv4InterfaceContainer interfaces);
+
+  /**
+   * \brief set this server's address so that we can read it easily
+   */
+  void SetOwnAddress (Address address);
+
 protected:
   virtual void DoDispose (void);
 
@@ -58,6 +69,18 @@ private:
 
   virtual void StartApplication (void);
   virtual void StopApplication (void);
+
+  /**
+   * \brief Schedule the next packet transmission
+   * \param dt time interval between packets.
+   */
+  void ScheduleTransmit (Time dt);
+
+  /**
+   * \brief Send a packet
+   */
+  void Send (void);
+
 
   /**
    * \brief Handle a packet reception.
@@ -75,9 +98,22 @@ private:
   uint32_t m_size; //<! Size of the sent packet
   uint32_t m_dataSize; //!< Packet payload size (must be equal to m_size)
   uint8_t *m_data; //!< Packet data
-  Ptr<Socket> m_socket; //!< IPv4 Socket
+  Ptr<Socket> m_socket; //!< IPv4 Socket for receiving
+  Ptr<Socket> m_socket_send; //!< IPv4 Socket for sending
   Ptr<Socket> m_socket6; //!< IPv6 Socket
   Address m_local; //!< local multicast address
+
+  uint32_t m_count; //!< Maximum number of packets the application will send
+  uint32_t m_sent; //!< Counter for sent packets
+  Time m_interval; //!< Packet inter-send time
+
+  double m_estimate; //!< The estimate being held by the node
+  double m_epsilon; //!< Convergence epsilon for gossip
+
+  Ipv4InterfaceContainer m_interfaces;
+  Address m_own_address; //!< Server's own address
+
+  EventId m_sendEvent; //!< Event to send the next packet
 };
 
 } // namespace ns3
