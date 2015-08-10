@@ -91,6 +91,11 @@ private:
    */
   void HandleRead (Ptr<Socket> socket);
 
+  /**
+   * \brief Handle a packet reception without responding.
+   */
+  void HandleReadWithoutResponse (Ptr<Socket> socket);
+
   void SetDataSize (uint32_t dataSize);
   uint32_t GetDataSize (void) const;
 
@@ -108,6 +113,7 @@ private:
   Time m_interval; //!< Packet inter-send time
 
   double m_estimate; //!< The estimate being held by the node
+  double m_old_estimate; //!< The previous estimate
   double m_epsilon; //!< Convergence epsilon for gossip
 
   Ipv4InterfaceContainer m_interfaces;
