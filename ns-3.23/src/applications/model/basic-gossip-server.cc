@@ -38,6 +38,7 @@
 #include <sstream>
 #include <math.h>
 #include <cmath>
+#include <iomanip>
 
 namespace ns3 {
 
@@ -56,11 +57,6 @@ BasicGossipServer::GetTypeId (void)
                    UintegerValue (9),
                    MakeUintegerAccessor (&BasicGossipServer::m_port),
                    MakeUintegerChecker<uint16_t> ())
-    .AddAttribute ("PacketSize", "Size of echo data in outbound packets",
-                   UintegerValue (100),
-                   MakeUintegerAccessor (&BasicGossipServer::SetDataSize,
-                                         &BasicGossipServer::GetDataSize),
-                   MakeUintegerChecker<uint32_t> ())
     .AddAttribute ("MaxPackets", "The maximum number of packets the application will send",
                    UintegerValue (100),
                    MakeUintegerAccessor (&BasicGossipServer::m_count),
@@ -122,9 +118,9 @@ BasicGossipServer::ScheduleTransmit (Time dt)
 void
 BasicGossipServer::Send (void)
 {
-  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " m_estimate: " << m_estimate);
-  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " m_old_estimate: " << m_old_estimate);
-  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " fabs(m_estimate - m_old_estimate): " << fabs(m_estimate - m_old_estimate));
+  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " m_estimate: " << std::setprecision(12) << m_estimate);
+  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " m_old_estimate: " << std::setprecision(12) << m_old_estimate);
+  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " fabs(m_estimate - m_old_estimate): " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
   if (m_sent > 0 && fabs(m_estimate - m_old_estimate) < m_epsilon) {
     NS_LOG_INFO("Returning early");
     // Return early without sending if we've converged
@@ -152,8 +148,9 @@ BasicGossipServer::Send (void)
   double msg = m_estimate;
   m_dataSize = sizeof(msg);
   std::stringstream s;
-  s << msg;
+  s << std::setprecision(12) << msg;
   std::string fill = s.str ();
+  //NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_send << "
   //NS_LOG_INFO("fill: " << fill << " has size " << sizeof(fill));
   //uint32_t dataSize = fill.size() + 1;
   uint32_t dataSize = sizeof(msg) + 1; // This change seems to fix the SEGFAULT
@@ -186,7 +183,7 @@ BasicGossipServer::Send (void)
   NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) <<
       //" SEND " << Simulator::Now ().GetSeconds () <<
       " SEND " << m_sent <<
-      " " << m_estimate <<
+      " " << std::setprecision(12) << m_estimate <<
       " " << Ipv4Address::ConvertFrom (dest));
   NS_LOG_INFO(" ");
 
@@ -354,15 +351,15 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
       //NS_LOG_INFO("RES m_estimate now: " << m_estimate);
       //NS_LOG_INFO("m_old_estimate now: " << m_old_estimate);
       std::ostringstream msg;
-      msg << setprecision(12) << m_estimate;
+      msg << std::setprecision(12) << m_estimate;
       Ptr<Packet> p = Create<Packet> ((uint8_t*) msg.str().c_str(), msg.str().length());
       // Send a packet reflecting the m_size attribute
       //Ptr<Packet> p = Create<Packet> (m_size);
       socket->SendTo (p, 0, from);
       //NS_LOG_FUNCTION(this << result);
-      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " m_estimate: " << m_estimate);
-      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " m_old_estimate: " << m_old_estimate);
-      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " fabs(m_estimate - m_old_estimate): " << fabs(m_estimate - m_old_estimate));
+      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " m_estimate: " << std::setprecision(12) << m_estimate);
+      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " m_old_estimate: " << std::setprecision(12) << m_old_estimate);
+      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " fabs(m_estimate - m_old_estimate): " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
 
       //++m_sent;
       //if (m_sent < m_count) {
@@ -374,7 +371,7 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
           NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) <<
               //" SEND " << Simulator::Now ().GetSeconds () <<
               " RECV " << m_sent <<
-              " " << m_estimate <<
+              " " << std::setprecision(12) << m_estimate <<
               " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ());
           NS_LOG_INFO(" ");
           /*
@@ -391,29 +388,6 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
                        Inet6SocketAddress::ConvertFrom (from).GetPort ());
         }
     }
-}
-
-void 
-BasicGossipServer::SetDataSize (uint32_t dataSize)
-{
-  NS_LOG_FUNCTION (this << dataSize);
-
-  //
-  // If the server is setting the echo packet data size this way, we infer
-  // that she doesn't care about the contents of the packet at all, so 
-  // neither will we.
-  //
-  delete [] m_data;
-  m_data = 0;
-  m_dataSize = 0;
-  m_size = dataSize;
-}
-
-uint32_t 
-BasicGossipServer::GetDataSize (void) const
-{
-  NS_LOG_FUNCTION (this);
-  return m_size;
 }
 
 } // Namespace ns3

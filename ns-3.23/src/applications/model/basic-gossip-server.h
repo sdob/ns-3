@@ -96,9 +96,6 @@ private:
    */
   void HandleReadWithoutResponse (Ptr<Socket> socket);
 
-  void SetDataSize (uint32_t dataSize);
-  uint32_t GetDataSize (void) const;
-
   uint16_t m_port; //!< Port on which we listen for incoming packets.
   uint32_t m_size; //<! Size of the sent packet
   uint32_t m_dataSize; //!< Packet payload size (must be equal to m_size)
