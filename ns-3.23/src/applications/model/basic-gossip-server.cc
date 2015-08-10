@@ -120,19 +120,21 @@ BasicGossipServer::ScheduleTransmit (Time dt)
 void
 BasicGossipServer::Send (void)
 {
-  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " m_estimate: " << std::setprecision(12) << m_estimate);
-  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " m_old_estimate: " << std::setprecision(12) << m_old_estimate);
-  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " fabs(m_estimate - m_old_estimate): " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
+
+  // If we've started gossip and there's been no change, then re-schedule a send event for the next cycle
   if (m_sent > 0 && fabs(m_estimate - m_old_estimate) < m_epsilon) {
-    NS_LOG_INFO("Returning early");
-    // Return early without sending if we've converged
+    ScheduleTransmit (m_interval);
+    //NS_LOG_INFO("Returning early");
     return;
   }
   NS_LOG_FUNCTION (this);
   NS_ASSERT (m_sendEvent.IsExpired ());
 
-  // Choose a random element of the interfaces vector --- assumes that there are at least two interfaces
-  // TODO: introduce some error checking in case somebody does something stupid and tries to run the experiment with only one node
+  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " estimate " << std::setprecision(12) << m_estimate);
+  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " old_estimate " << std::setprecision(12) << m_old_estimate);
+  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " change " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
+
+  // Choose a random element of the interfaces vector (assumes that there are at least two interfaces)
   Ptr<UniformRandomVariable> x = CreateObject<UniformRandomVariable> ();
   x->SetAttribute ("Min", DoubleValue(0));
   x->SetAttribute ("Max", DoubleValue(m_interfaces.GetN() - 1)); // range is [min, max) exclusive for doubles 
@@ -166,11 +168,7 @@ BasicGossipServer::Send (void)
   m_socket_send->Connect (InetSocketAddress(Ipv4Address::ConvertFrom(dest), m_port));
   m_socket_send->Send(p);
 
-  NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) <<
-      //" SEND " << Simulator::Now ().GetSeconds () <<
-      " SEND " << m_sent <<
-      " " << std::setprecision(12) << m_estimate <<
-      " " << Ipv4Address::ConvertFrom (dest));
+  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " " << std::setprecision(12) << m_estimate << " " << Ipv4Address::ConvertFrom (dest));
   NS_LOG_INFO(" ");
 
   ++m_sent;
@@ -300,7 +298,11 @@ BasicGossipServer::HandleReadWithoutResponse (Ptr<Socket> socket)
       // Update new estimate
       m_estimate = (m_estimate + dataAsDouble) / 2;
 
-
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " " << std::setprecision(12) << dataAsDouble << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ()); 
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " old_estimate " << std::setprecision(12) << m_old_estimate);
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " estimate " << std::setprecision(12) << m_estimate);
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " change " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
+      NS_LOG_INFO(" ");
     }
 }
 
@@ -323,37 +325,26 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
       std::string s = std::string((char*) buffer);
       // Convert the string into a double
       double dataAsDouble = atof((char *) buffer);
+
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " " << std::setprecision(12) << dataAsDouble << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ()); 
+
       // Store the old estimate
       m_old_estimate = m_estimate; 
       // Update the estimated mean
       m_estimate = (m_estimate + dataAsDouble) / 2;
-
-      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) <<
-          " RECV " << m_sent <<
-          " " << std::setprecision(12) << dataAsDouble <<
-          " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ()); 
-
       // Put the updated mean into a packet and return it
       std::ostringstream msg;
       msg << std::setprecision(12) << m_estimate;
       Ptr<Packet> p = Create<Packet> ((uint8_t*) msg.str().c_str(), msg.str().length());
       socket->SendTo (p, 0, from);
 
-      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " m_old_estimate: " << std::setprecision(12) << m_old_estimate);
-      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " m_estimate: " << std::setprecision(12) << m_estimate);
-      NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " fabs(m_estimate - m_old_estimate): " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
-
-      //++m_sent;
-      //if (m_sent < m_count) {
-        //ScheduleTransmit (m_interval);
-      //}
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " old_estimate " << std::setprecision(12) << m_old_estimate);
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " estimate " << std::setprecision(12) << m_estimate);
+      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " change " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
 
       if (InetSocketAddress::IsMatchingType (from))
         {
-          NS_LOG_INFO(Ipv4Address::ConvertFrom(m_own_address) <<
-              " RESP " << m_sent <<
-              " " << std::setprecision(12) << m_estimate <<
-              " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ());
+          NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RESP " << m_sent << " " << std::setprecision(12) << m_estimate << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ());
           NS_LOG_INFO(" ");
         }
       else if (Inet6SocketAddress::IsMatchingType (from))
