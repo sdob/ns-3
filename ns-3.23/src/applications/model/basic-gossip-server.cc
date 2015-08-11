@@ -69,10 +69,10 @@ BasicGossipServer::GetTypeId (void)
                    DoubleValue (0.0),
                    MakeDoubleAccessor (&BasicGossipServer::m_estimate),
                    MakeDoubleChecker<double> ())
-    .AddAttribute("Epsilon", "The minimum change in estimate for a node to continue gossip",
-                  DoubleValue (pow(10, -4)),
-                  MakeDoubleAccessor (&BasicGossipServer::m_epsilon),
-                  MakeDoubleChecker<double> ())
+    .AddAttribute ("Epsilon", "The minimum change in estimate for a node to continue gossip",
+                   DoubleValue (pow(10, -4)),
+                   MakeDoubleAccessor (&BasicGossipServer::m_epsilon),
+                   MakeDoubleChecker<double> ())
   ;
   return tid;
 }
@@ -80,9 +80,6 @@ BasicGossipServer::GetTypeId (void)
 BasicGossipServer::BasicGossipServer ()
 {
   NS_LOG_FUNCTION (this);
-  // Initialize m_data and m_dataSize
-  m_data = 0;
-  m_dataSize = 0;
   m_sendEvent = EventId ();
   m_sent = 0; // number of packets sent
 }
@@ -92,10 +89,7 @@ BasicGossipServer::~BasicGossipServer()
 {
   NS_LOG_FUNCTION (this);
   m_socket = 0;
-  m_socket6 = 0;
-  delete [] m_data;
-  m_data = 0;
-  m_dataSize = 0;
+  m_socket_send = 0;
 }
 
 
@@ -116,69 +110,6 @@ BasicGossipServer::ScheduleTransmit (Time dt)
 }
 
 
-
-void
-BasicGossipServer::Send (void)
-{
-
-  // If we've started gossip and there's been no change, then re-schedule a send event for the next cycle
-  if (m_sent > 0 && fabs(m_estimate - m_old_estimate) < m_epsilon) {
-    ScheduleTransmit (m_interval);
-    //NS_LOG_INFO("Returning early");
-    return;
-  }
-  NS_LOG_FUNCTION (this);
-  NS_ASSERT (m_sendEvent.IsExpired ());
-
-  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " estimate " << std::setprecision(12) << m_estimate);
-  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " old_estimate " << std::setprecision(12) << m_old_estimate);
-  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " change " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
-
-  // Choose a random element of the interfaces vector (assumes that there are at least two interfaces)
-  Ptr<UniformRandomVariable> x = CreateObject<UniformRandomVariable> ();
-  x->SetAttribute ("Min", DoubleValue(0));
-  x->SetAttribute ("Max", DoubleValue(m_interfaces.GetN() - 1)); // range is [min, max) exclusive for doubles 
-  int index = x->GetInteger ();
-  while (m_interfaces.GetAddress(index) == m_own_address) {
-    index = x->GetInteger ();
-  }
-  Address dest = m_interfaces.GetAddress(index);
-
-  // Now we've got an address to send to, let's build a packet
-  Ptr<Packet> p;
-  double msg = m_estimate;
-  m_dataSize = sizeof(msg);
-  std::stringstream s;
-  s << std::setprecision(12) << msg;
-  std::string fill = s.str ();
-  uint32_t dataSize = sizeof(msg) + 1; // This change seems to fix the SEGFAULT
-  if (dataSize != m_dataSize) {
-    delete [] m_data;
-    m_data = new uint8_t [dataSize];
-    m_dataSize = dataSize;
-  }
-  memcpy(m_data, s.str().c_str(), m_dataSize); // SEGFAULT happened here.
-  m_size = dataSize;
-
-  NS_ASSERT_MSG (m_dataSize == m_size, "BasicGossipServer::Send(): m_size and m_dataSize inconsistent");
-  NS_ASSERT_MSG (m_data, "BasicGossipServer::Send(): m_dataSize but no m_data");
-  p = Create<Packet> (m_data, m_dataSize);
-
-  // Connect to the remote and send the packet
-  m_socket_send->Connect (InetSocketAddress(Ipv4Address::ConvertFrom(dest), m_port));
-  m_socket_send->Send(p);
-
-  NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " SEND " << m_sent << " " << std::setprecision(12) << m_estimate << " " << Ipv4Address::ConvertFrom (dest));
-  NS_LOG_INFO(" ");
-
-  ++m_sent;
-  // If we haven't hit the maximum number of packets to be sent, then schedule another one
-  if (m_sent < m_count)
-    {
-      ScheduleTransmit (m_interval);
-    }
-}
-
 void
 BasicGossipServer::SetNeighbours (Ipv4InterfaceContainer interfaces)
 {
@@ -186,12 +117,14 @@ BasicGossipServer::SetNeighbours (Ipv4InterfaceContainer interfaces)
   m_interfaces = interfaces;
 }
 
+
 void
 BasicGossipServer::SetOwnAddress (Address address)
 {
+  NS_LOG_FUNCTION(this << address);
   m_own_address = address;
-  NS_LOG_FUNCTION(this << m_own_address);
 }
+
 
 void 
 BasicGossipServer::StartApplication (void)
@@ -200,12 +133,13 @@ BasicGossipServer::StartApplication (void)
 
   m_old_estimate = m_estimate;
 
+
+  TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
+
   if (m_socket == 0)
     {
-      TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
+      // Create the socket that will listen for and respond to traffic sent by other nodes
       m_socket = Socket::CreateSocket (GetNode (), tid);
-      //Ipv4Address any = Ipv4Address::GetAny ();
-      //NS_LOG_INFO("got address: " << any);
       InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), m_port);
       m_socket->Bind (local);
       if (addressUtils::IsMulticast (m_local))
@@ -221,38 +155,18 @@ BasicGossipServer::StartApplication (void)
               NS_FATAL_ERROR ("Error: Failed to join multicast group");
             }
         }
-      m_socket_send = Socket::CreateSocket (GetNode (), tid);
-      m_socket->Bind ();
+
     }
 
-  if (m_socket6 == 0)
-    {
-      TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
-      m_socket6 = Socket::CreateSocket (GetNode (), tid);
-      Inet6SocketAddress local6 = Inet6SocketAddress (Ipv6Address::GetAny (), m_port);
-      m_socket6->Bind (local6);
-      if (addressUtils::IsMulticast (local6))
-        {
-          Ptr<UdpSocket> udpSocket = DynamicCast<UdpSocket> (m_socket6);
-          if (udpSocket)
-            {
-              // equivalent to setsockopt (MCAST_JOIN_GROUP)
-              udpSocket->MulticastJoinGroup (0, local6);
-            }
-          else
-            {
-              NS_FATAL_ERROR ("Error: Failed to join multicast group");
-            }
-        }
-    }
+    // Create the socket that will initiate gossip and listen for responses
+    m_socket_send = Socket::CreateSocket (GetNode (), tid);
+    m_socket->Bind ();
 
+  // Handle response on the receiving socket
   m_socket->SetRecvCallback (MakeCallback (&BasicGossipServer::HandleRead, this));
-  m_socket6->SetRecvCallback (MakeCallback (&BasicGossipServer::HandleRead, this));
 
   // Handle response on the sending socket
   m_socket_send->SetRecvCallback (MakeCallback (&BasicGossipServer::HandleReadWithoutResponse, this));
-
-  // Sending socket
 
   // Schedule a transmission
   ScheduleTransmit (Seconds (0.));
@@ -268,43 +182,101 @@ BasicGossipServer::StopApplication ()
       m_socket->Close ();
       m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
     }
-  if (m_socket6 != 0) 
+
+  if (m_socket_send != 0)
     {
-      m_socket6->Close ();
-      m_socket6->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
+      m_socket_send->Close ();
+      m_socket_send->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
     }
 
   Simulator::Cancel (m_sendEvent);
 }
 
+
+void
+BasicGossipServer::Send (void)
+{
+  // If we've started gossip and there's been no change, then re-schedule a send event for the next cycle
+  if (m_sent > 0 && fabs(m_estimate - m_old_estimate) < m_epsilon) {
+    ScheduleTransmit (m_interval);
+    return;
+  }
+
+  // Otherwise, choose a neighbour, create a packet containing the current estimate,
+  // and send the packet to the neighbour
+
+  NS_LOG_FUNCTION (this);
+  NS_ASSERT (m_sendEvent.IsExpired ());
+
+  // Choose a random neighbour from the interfaces vector. If there are fewer than
+  // two nodes, then this will loop forever, do don't do that.
+  Ptr<UniformRandomVariable> x = CreateObject<UniformRandomVariable> ();
+  x->SetAttribute ("Min", DoubleValue(0));
+  x->SetAttribute ("Max", DoubleValue(m_interfaces.GetN() - 1));
+  int index = x->GetInteger ();
+  // Loop until we find a random neighbour that isn't this node
+  while (m_interfaces.GetAddress(index) == m_own_address) {
+    index = x->GetInteger ();
+  }
+  Address dest = m_interfaces.GetAddress(index);
+
+  // Create a packet with the current estimate as payload
+  std::ostringstream msg;
+  msg << std::setprecision(12) << m_estimate;
+  Ptr<Packet> p = Create<Packet> ((uint8_t*) msg.str().c_str(), msg.str().length());
+
+  // Connect to the remote and send the packet
+  m_socket_send->Connect (InetSocketAddress(Ipv4Address::ConvertFrom(dest), m_port));
+  m_socket_send->Send(p);
+
+  ++m_sent;
+  // If we haven't hit the maximum number of packets to be sent, then schedule another one
+  if (m_sent < m_count)
+    {
+      ScheduleTransmit (m_interval);
+    }
+
+  NS_LOG_INFO(
+      Simulator::Now ().GetSeconds () // Time
+      << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
+      << " " << "SEND" // initiating gossip 
+      << " " << Ipv4Address::ConvertFrom (dest) // recipient
+      << " " << m_sent // Number of packets sent
+      << " " << std::setprecision(12) << m_estimate // current estimate
+      );
+}
+
+
 void
 BasicGossipServer::HandleReadWithoutResponse (Ptr<Socket> socket)
 {
+  NS_LOG_FUNCTION (this << socket);
+
   Ptr<Packet> packet;
   Address from;
+
   while ((packet = socket->RecvFrom (from)))
     {
-      packet->RemoveAllPacketTags ();
-      packet->RemoveAllByteTags ();
-
-      // Retrieve the string contents of the packet
-      uint8_t *buffer = new uint8_t[packet->GetSize()];
-      packet->CopyData(buffer, packet->GetSize ());
-      std::string s = std::string((char*) buffer);
-      // Convert string to double
-      double dataAsDouble = atof((char *) buffer);
+      // Extract a double from the received packet payload
+      double dataAsDouble = RetrievePayload(packet);
       // Store old estimate
       m_old_estimate = m_estimate;
       // Update new estimate
       m_estimate = (m_estimate + dataAsDouble) / 2;
 
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " " << std::setprecision(12) << dataAsDouble << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ()); 
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " old_estimate " << std::setprecision(12) << m_old_estimate);
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " estimate " << std::setprecision(12) << m_estimate);
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RNOR " << m_sent << " change " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
-      NS_LOG_INFO(" ");
+      NS_LOG_INFO(
+          Simulator::Now ().GetSeconds () // Time
+          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
+          << " " << "RNOR" // receiving without responding
+          << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 () // sender
+          << " " << m_old_estimate // previous estimate
+          << " " << dataAsDouble // new information
+          << " " << m_estimate //updated estimate
+          << " " << fabs(m_estimate - m_old_estimate) // change
+          );
     }
 }
+
 
 void 
 BasicGossipServer::HandleRead (Ptr<Socket> socket)
@@ -313,47 +285,60 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
 
   Ptr<Packet> packet;
   Address from;
+
   while ((packet = socket->RecvFrom (from)))
     {
-
-      packet->RemoveAllPacketTags ();
-      packet->RemoveAllByteTags ();
-
-      // Copy the received packet data into a string
-      uint8_t *buffer = new uint8_t[packet->GetSize()];
-      packet->CopyData(buffer, packet->GetSize ());
-      std::string s = std::string((char*) buffer);
-      // Convert the string into a double
-      double dataAsDouble = atof((char *) buffer);
-
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " " << std::setprecision(12) << dataAsDouble << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ()); 
-
+      // Extract a double from the received packet payload
+      double dataAsDouble = RetrievePayload(packet);
       // Store the old estimate
       m_old_estimate = m_estimate; 
       // Update the estimated mean
       m_estimate = (m_estimate + dataAsDouble) / 2;
+
+      NS_LOG_INFO(
+          Simulator::Now ().GetSeconds () // Time
+          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
+          << " " << "RECV" // receiving data from
+          << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 () // sender
+          << " " << std::setprecision(12) << m_old_estimate // previous estimate
+          << " " << std::setprecision(12) << dataAsDouble // new information
+          << " " << m_estimate // updated estimate
+          << " " << fabs(m_estimate - m_old_estimate) // change
+          );
+
       // Put the updated mean into a packet and return it
-      std::ostringstream msg;
-      msg << std::setprecision(12) << m_estimate;
-      Ptr<Packet> p = Create<Packet> ((uint8_t*) msg.str().c_str(), msg.str().length());
+      Ptr<Packet> p = MakePacket(m_estimate);
       socket->SendTo (p, 0, from);
 
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " old_estimate " << std::setprecision(12) << m_old_estimate);
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " estimate " << std::setprecision(12) << m_estimate);
-      NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RECV " << m_sent << " change " << std::setprecision(12) << fabs(m_estimate - m_old_estimate));
-
-      if (InetSocketAddress::IsMatchingType (from))
-        {
-          NS_LOG_INFO(Simulator::Now ().GetSeconds () << " " << Ipv4Address::ConvertFrom(m_own_address) << " RESP " << m_sent << " " << std::setprecision(12) << m_estimate << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 ());
-          NS_LOG_INFO(" ");
-        }
-      else if (Inet6SocketAddress::IsMatchingType (from))
-        {
-          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds () << "s server sent " << packet->GetSize () << " bytes to " <<
-                       Inet6SocketAddress::ConvertFrom (from).GetIpv6 () << " port " <<
-                       Inet6SocketAddress::ConvertFrom (from).GetPort ());
-        }
+      NS_LOG_INFO(
+          Simulator::Now ().GetSeconds () // Time
+          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
+          << " " << "RESP" // responding to initiated gossip
+          << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 () // recipient of packet
+          << " " << m_sent // number of packets this node has initiated
+          << " " << std::setprecision(12) << m_estimate // updated estimate
+          );
     }
+}
+
+
+Ptr<Packet>
+BasicGossipServer::MakePacket (double estimate)
+{
+  std::ostringstream msg;
+  msg << std::setprecision(12) << estimate;
+  Ptr<Packet> p = Create<Packet> ((uint8_t*) msg.str().c_str(), msg.str().length());
+  return p;
+}
+
+
+double
+BasicGossipServer::RetrievePayload (Ptr<Packet> packet)
+{
+  uint8_t *buffer = new uint8_t[packet->GetSize()];
+  packet->CopyData(buffer, packet->GetSize());
+  std::string s = std::string((char*) buffer);
+  return atof((char*) buffer);
 }
 
 } // Namespace ns3

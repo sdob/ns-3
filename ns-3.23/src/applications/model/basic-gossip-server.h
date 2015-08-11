@@ -81,7 +81,6 @@ private:
    */
   void Send (void);
 
-
   /**
    * \brief Handle a packet reception.
    *
@@ -96,13 +95,20 @@ private:
    */
   void HandleReadWithoutResponse (Ptr<Socket> socket);
 
+  /**
+   * \brief Create a packet containing a double value.
+   */
+  Ptr<Packet> MakePacket (double estimate);
+
+  /**
+   * \brief Extract a double value from a packet.
+   */
+  double RetrievePayload (Ptr<Packet> packet);
+
+
   uint16_t m_port; //!< Port on which we listen for incoming packets.
-  uint32_t m_size; //<! Size of the sent packet
-  uint32_t m_dataSize; //!< Packet payload size (must be equal to m_size)
-  uint8_t *m_data; //!< Packet data
   Ptr<Socket> m_socket; //!< IPv4 Socket for receiving
   Ptr<Socket> m_socket_send; //!< IPv4 Socket for sending
-  Ptr<Socket> m_socket6; //!< IPv6 Socket
   Address m_local; //!< local multicast address
 
   uint32_t m_count; //!< Maximum number of packets the application will send
@@ -113,10 +119,11 @@ private:
   double m_old_estimate; //!< The previous estimate
   double m_epsilon; //!< Convergence epsilon for gossip
 
-  Ipv4InterfaceContainer m_interfaces;
+  Ipv4InterfaceContainer m_interfaces; //!< Neighbours' addresses
   Address m_own_address; //!< Server's own address
 
   EventId m_sendEvent; //!< Event to send the next packet
+
 };
 
 } // namespace ns3
