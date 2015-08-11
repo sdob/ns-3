@@ -11,9 +11,10 @@ import ns.internet
 import ns.network
 #import ns.p2p
 
+from ns.core import DoubleValue, Seconds, StringValue, TimeValue, UintegerValue
 from ns.network import NodeContainer
 
-num_nodes = 2
+num_nodes = 3
 csmaDataRate = "100Mbps"
 csmaDelay = "2ms"
 
@@ -35,11 +36,6 @@ csma.SetChannelAttribute("Delay", ns.core.StringValue("2ms"))
 
 devices = csma.Install(nodes)
 
-#p2p = ns3.PointToPointHelper()
-#p2p.SetChannelAttribute("DataRate", ns.core.StringValue("100Mbps"))
-#p2p.SetChannelAttribute("Delay", ns.core.StringValue("2ms"))
-
-
 stack = ns.internet.InternetStackHelper()
 stack.Install(nodes)
 
@@ -48,30 +44,22 @@ address.SetBase(ns.network.Ipv4Address(IP_ADDRESS_BASE), ns.network.Ipv4Mask(IP_
 interfaces = address.Assign(devices)
 
 # Uniform random values
-initial_values = [random.random() - 0.5 for _ in xrange(num_nodes)]
+initial_values = [(random.random() - 0.5) for _ in xrange(num_nodes)]
 
 print "Creating nodes with initial estimates."
 for i in xrange(num_nodes):
     n = nodes.Get(i)
     server = ns.applications.BasicGossipServerHelper(9)
-    server.SetAttribute("MaxPackets", ns.core.UintegerValue(1))
-    server.SetAttribute("InitialEstimate", ns.core.DoubleValue(initial_values[i]))
-    server.SetAttribute("Interval", ns.core.TimeValue(ns.core.Seconds(1)))
-    server.SetAttribute("Epsilon", ns.core.DoubleValue(0.001))
+    server.SetAttribute("MaxPackets", UintegerValue(100))
+    server.SetAttribute("InitialEstimate", DoubleValue(initial_values[i]))
+    server.SetAttribute("Interval", TimeValue(Seconds(1)))
+    server.SetAttribute("Epsilon", DoubleValue(0.00001))
     serverApps = server.Install(nodes.Get(i))
     serverApps.Get(0).SetNeighbours(interfaces)
     serverApps.Get(0).SetOwnAddress(interfaces.GetAddress(i)) # TODO: check that this is OK
     print "%s -> %s" % (interfaces.GetAddress(i), initial_values[i])
-    serverApps.Start(ns.core.Seconds(0))
-    serverApps.Stop(ns.core.Seconds(100))
-
-# 
-#def scheduled_callback():
-    #print "callback at %.3ss" % (ns.core.Simulator.Now().GetMilliSeconds() / 1000.0)
-#ns.core.Simulator.Schedule(ns.core.Seconds(2), scheduled_callback)
-
-#ns.network.Packet.EnablePrinting()
-#csma.EnablePcapAll("gossip")
+    serverApps.Start(Seconds(0))
+    serverApps.Stop(Seconds(5000))
 
 ns.core.Simulator.Run()
 ns.core.Simulator.Destroy()
