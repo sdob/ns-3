@@ -23,6 +23,8 @@ def build(bld):
         # basic gossip
         'model/basic-gossip-client.cc',
         'model/basic-gossip-server.cc',
+        # varclust
+        'model/varclust-node.cc',
         'model/v4ping.cc',
         'model/application-packet-probe.cc',
         'helper/bulk-send-helper.cc',
@@ -35,6 +37,8 @@ def build(bld):
         'helper/request-response-helper.cc',
         # basic gossip
         'helper/basic-gossip-helper.cc',
+        # varclust
+        'helper/varclust-node-helper.cc',
         'helper/v4ping-helper.cc',
         'helper/radvd-helper.cc',
         ]
@@ -67,6 +71,8 @@ def build(bld):
         # basic gossip
         'model/basic-gossip-client.h',
         'model/basic-gossip-server.h',
+        # varclust
+        'model/varclust-node.h',
         'model/v4ping.h',
         'model/application-packet-probe.h',
         'helper/bulk-send-helper.h',
@@ -79,6 +85,8 @@ def build(bld):
         'helper/request-response-helper.h',
         # basic gossip
         'helper/basic-gossip-helper.h',
+        # varclust
+        'helper/varclust-node-helper.h',
         'helper/v4ping-helper.h',
         'helper/radvd-helper.h',
         ]
