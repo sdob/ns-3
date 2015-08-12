@@ -38,6 +38,7 @@
 #include <sstream>
 #include <math.h>
 #include <cmath>
+#include <cstdio>
 #include <iomanip>
 
 namespace ns3 {
@@ -67,7 +68,7 @@ BasicGossipServer::GetTypeId (void)
                    MakeTimeChecker ())
     .AddAttribute ("InitialEstimate", "The initial estimate the node is holding",
                    DoubleValue (0.0),
-                   MakeDoubleAccessor (&BasicGossipServer::m_estimate),
+                   MakeDoubleAccessor (&BasicGossipServer::m_estimate_w),
                    MakeDoubleChecker<double> ())
     .AddAttribute ("Epsilon", "The minimum change in estimate for a node to continue gossip",
                    DoubleValue (pow(10, -4)),
@@ -131,7 +132,7 @@ BasicGossipServer::StartApplication (void)
 {
   NS_LOG_FUNCTION (this);
 
-  m_old_estimate = m_estimate;
+  m_old_estimate_w = m_estimate_w;
 
 
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
@@ -197,7 +198,7 @@ void
 BasicGossipServer::Send (void)
 {
   // If we've started gossip and there's been no change, then re-schedule a send event for the next cycle
-  if (m_sent > 0 && fabs(m_estimate - m_old_estimate) < m_epsilon) {
+  if (m_sent > 0 && fabs(m_estimate_w - m_old_estimate_w) < m_epsilon) {
     ScheduleTransmit (m_interval);
     return;
   }
@@ -221,9 +222,7 @@ BasicGossipServer::Send (void)
   Address dest = m_interfaces.GetAddress(index);
 
   // Create a packet with the current estimate as payload
-  std::ostringstream msg;
-  msg << std::setprecision(12) << m_estimate;
-  Ptr<Packet> p = Create<Packet> ((uint8_t*) msg.str().c_str(), msg.str().length());
+  Ptr<Packet> p = MakePacket(m_estimate_w);
 
   // Connect to the remote and send the packet
   m_socket_send->Connect (InetSocketAddress(Ipv4Address::ConvertFrom(dest), m_port));
@@ -237,12 +236,12 @@ BasicGossipServer::Send (void)
     }
 
   NS_LOG_INFO(
-      Simulator::Now ().GetSeconds () // Time
-      << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
+      "" << std::setprecision(12) << Simulator::Now ().GetSeconds () // Time
       << " " << "SEND" // initiating gossip 
+      << " " << Ipv4Address::ConvertFrom (m_own_address) // own address
       << " " << Ipv4Address::ConvertFrom (dest) // recipient
-      << " " << m_sent // Number of packets sent
-      << " " << std::setprecision(12) << m_estimate // current estimate
+      //<< " " << m_sent // Number of packets sent
+      << " " << std::setprecision(12) << m_estimate_w // current estimate
       );
 }
 
@@ -257,26 +256,41 @@ BasicGossipServer::HandleReadWithoutResponse (Ptr<Socket> socket)
 
   while ((packet = socket->RecvFrom (from)))
     {
+
       // Extract a double from the received packet payload
-      double dataAsDouble = RetrievePayload(packet);
-      // Store old estimate
-      m_old_estimate = m_estimate;
-      // Update new estimate
-      m_estimate = (m_estimate + dataAsDouble) / 2;
+      double data = ExtractPayload(packet);
 
       NS_LOG_INFO(
           Simulator::Now ().GetSeconds () // Time
-          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
           << " " << "RNOR" // receiving without responding
-          << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 () // sender
-          << " " << m_old_estimate // previous estimate
-          << " " << dataAsDouble // new information
-          << " " << m_estimate //updated estimate
-          << " " << fabs(m_estimate - m_old_estimate) // change
+          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
+          << " " << std::setprecision(12) << data // new information
           );
+
+      Update(data);
     }
 }
 
+void
+BasicGossipServer::Update(double data)
+{
+  NS_LOG_FUNCTION (this);
+
+  // Store old estimate
+  m_old_estimate_w = m_estimate_w;
+  // Update new estimate
+  m_estimate_w = (m_estimate_w + data) / 2;
+
+  NS_LOG_INFO(
+      Simulator::Now ().GetSeconds()
+      << " " << "UPDT"
+      << " " << Ipv4Address::ConvertFrom (m_own_address)
+      << " " << std::setprecision(12) << m_old_estimate_w
+      << " " << std::setprecision(12) << data
+      << " " << std::setprecision(12) << m_estimate_w
+      << " " << std::setprecision(12) << fabs(m_estimate_w - m_old_estimate_w)
+      );
+}
 
 void 
 BasicGossipServer::HandleRead (Ptr<Socket> socket)
@@ -288,36 +302,32 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
 
   while ((packet = socket->RecvFrom (from)))
     {
+
       // Extract a double from the received packet payload
-      double dataAsDouble = RetrievePayload(packet);
-      // Store the old estimate
-      m_old_estimate = m_estimate; 
-      // Update the estimated mean
-      m_estimate = (m_estimate + dataAsDouble) / 2;
+      double data = ExtractPayload(packet);
 
       NS_LOG_INFO(
           Simulator::Now ().GetSeconds () // Time
-          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
           << " " << "RECV" // receiving data from
+          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
           << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 () // sender
-          << " " << std::setprecision(12) << m_old_estimate // previous estimate
-          << " " << std::setprecision(12) << dataAsDouble // new information
-          << " " << m_estimate // updated estimate
-          << " " << fabs(m_estimate - m_old_estimate) // change
+          << " " << std::setprecision(12) << data // new information
           );
 
-      // Put the updated mean into a packet and return it
-      Ptr<Packet> p = MakePacket(m_estimate);
+      // Put the current estimate into a packet and return it
+      Ptr<Packet> p = MakePacket(m_estimate_w);
       socket->SendTo (p, 0, from);
 
       NS_LOG_INFO(
-          Simulator::Now ().GetSeconds () // Time
-          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
+          "" << std::setprecision(12) << Simulator::Now ().GetSeconds () // Time
           << " " << "RESP" // responding to initiated gossip
+          << " " << Ipv4Address::ConvertFrom(m_own_address) // own address
           << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 () // recipient of packet
-          << " " << m_sent // number of packets this node has initiated
-          << " " << std::setprecision(12) << m_estimate // updated estimate
+          //<< " " << m_sent // number of packets this node has initiated
+          << " " << std::setprecision(12) << m_estimate_w // updated estimate
           );
+
+      Update(data);
     }
 }
 
@@ -325,19 +335,24 @@ BasicGossipServer::HandleRead (Ptr<Socket> socket)
 Ptr<Packet>
 BasicGossipServer::MakePacket (double estimate)
 {
+  NS_LOG_FUNCTION (this << estimate);
   std::ostringstream msg;
-  msg << std::setprecision(12) << estimate;
+  char buffer [50];
+  sprintf(buffer, "%.10f", estimate);
+  msg << buffer << '\0';
   Ptr<Packet> p = Create<Packet> ((uint8_t*) msg.str().c_str(), msg.str().length());
   return p;
 }
 
 
 double
-BasicGossipServer::RetrievePayload (Ptr<Packet> packet)
+BasicGossipServer::ExtractPayload (Ptr<Packet> packet)
 {
-  uint8_t *buffer = new uint8_t[packet->GetSize()];
+  NS_LOG_FUNCTION (this << packet);
+  packet->RemoveAllPacketTags ();
+  packet->RemoveAllByteTags ();
+  uint8_t *buffer = new  uint8_t[packet->GetSize()];
   packet->CopyData(buffer, packet->GetSize());
-  std::string s = std::string((char*) buffer);
   return atof((char*) buffer);
 }
 

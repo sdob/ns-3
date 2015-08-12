@@ -103,8 +103,12 @@ private:
   /**
    * \brief Extract a double value from a packet.
    */
-  double RetrievePayload (Ptr<Packet> packet);
+  double ExtractPayload (Ptr<Packet> packet);
 
+  /**
+   * \brief Update the stored estimate
+   */
+  void Update (double data);
 
   uint16_t m_port; //!< Port on which we listen for incoming packets.
   Ptr<Socket> m_socket; //!< IPv4 Socket for receiving
@@ -115,9 +119,15 @@ private:
   uint32_t m_sent; //!< Counter for sent packets
   Time m_interval; //!< Packet inter-send time
 
-  double m_estimate; //!< The estimate being held by the node
-  double m_old_estimate; //!< The previous estimate
   double m_epsilon; //!< Convergence epsilon for gossip
+
+  // Mean estimates
+  double m_estimate_w; //!< The estimate being held by the node
+  double m_old_estimate_w; //!< The previous estimate
+
+  //double m_estimate_w2; //!< The estimate of w^2 being held by the node
+  //double m_old_estimate_w2; //!< The previous estimate of w^2 being held by the node
+  //double m_epsilon; //!< Convergence 
 
   Ipv4InterfaceContainer m_interfaces; //!< Neighbours' addresses
   Address m_own_address; //!< Server's own address
