@@ -97,6 +97,7 @@ namespace ns3 {
       Ptr<Socket> m_socket_active; //<! Ipv4 Socket for the active thread
       Address m_local; //<! Local multicast address
 
+      double m_initial_delay; //<! Initial delay before sending first packet
       uint32_t m_count; //<! Maximum number of packets the application will send
       uint32_t m_sent; //<! Counter for sent packets
       Time m_interval; //<! Interval between sending on the active thread

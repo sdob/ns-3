@@ -44,6 +44,10 @@ namespace ns3 {
           UintegerValue (100),
           MakeUintegerAccessor (&VarclustNode::m_count),
           MakeUintegerChecker<uint32_t> ())
+      .AddAttribute ("InitialDelay", "The initial estimate the node is holding",
+          DoubleValue (0.0),
+          MakeDoubleAccessor (&VarclustNode::m_initial_delay),
+          MakeDoubleChecker<double> ())
       .AddAttribute ("Interval", "The time to wait between packets",
           TimeValue (Seconds (1.0)),
           MakeTimeAccessor (&VarclustNode::m_interval),
@@ -134,8 +138,8 @@ namespace ns3 {
     m_socket_active->Bind ();
     m_socket_active->SetRecvCallback (MakeCallback (&VarclustNode::HandleActiveRead, this));
 
-    // Schedule the first transmission
-    ScheduleTransmit (Seconds (0.));
+    // Schedule the first transmission for 0s + random delay
+    ScheduleTransmit (Seconds (0. + m_initial_delay));
 
     // Log initialization
     NS_LOG_INFO(
@@ -331,8 +335,9 @@ namespace ns3 {
         );
 
     bool old_connectivity_decision = m_connectivity_map[from];
-    // TODO: update connectivity map
+    // update connectivity map
     if (fabs(m_initial_measurement - initial_measurement) <= m_variance) {
+    //if (fabs(m_initial_measurement - initial_measurement) <= pow(m_variance, 0.5)) {
       m_connectivity_map[from] = true;
     } else {
       m_connectivity_map[from] = false;
