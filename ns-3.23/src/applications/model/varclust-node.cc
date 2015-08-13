@@ -336,8 +336,7 @@ namespace ns3 {
 
     bool old_connectivity_decision = m_connectivity_map[from];
     // update connectivity map
-    if (fabs(m_initial_measurement - initial_measurement) <= m_variance) {
-    //if (fabs(m_initial_measurement - initial_measurement) <= pow(m_variance, 0.5)) {
+    if (fabs(m_initial_measurement - initial_measurement) <= pow(m_variance, 0.5)) {
       m_connectivity_map[from] = true;
     } else {
       m_connectivity_map[from] = false;
