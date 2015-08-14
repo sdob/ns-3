@@ -40,7 +40,7 @@ namespace ns3 {
           UintegerValue (9),
           MakeUintegerAccessor (&VarclustNode::m_port),
           MakeUintegerChecker<uint16_t> ())
-      .AddAttribute ("MaxPackets", "The maximum number of packets the application will send",
+      .AddAttribute ("MaxPackets", "The maximum number of packets the application will send; if -1, then run until timeout/convergence",
           UintegerValue (100),
           MakeUintegerAccessor (&VarclustNode::m_count),
           MakeUintegerChecker<uint32_t> ())
@@ -193,7 +193,7 @@ namespace ns3 {
     m_socket_active->Send (p);
 
     ++m_sent;
-    if (m_sent < m_count) {
+    if (m_sent < m_count && m_count > 0) {
       ScheduleTransmit (m_interval);
     }
 
@@ -202,6 +202,7 @@ namespace ns3 {
         << " " << "ASEND" // Initiating gossip
         << " " << Ipv4Address::ConvertFrom (m_own_address) // this node's address
         << " " << Ipv4Address::ConvertFrom (dest) // recipient's address
+        << " " << std::setprecision(12) << m_initial_measurement // this node's initial measurement
         << " " << std::setprecision(12) << m_estimate_w // this node's m_estimate_w
         << " " << std::setprecision(12) << m_estimate_w2 // this node's m_estimate_w2
         );
@@ -272,7 +273,7 @@ namespace ns3 {
 
   Ptr<Packet> VarclustNode::MakePacket (double initial_measurement, double estimate_w, double estimate_w2) {
     NS_LOG_FUNCTION (this << estimate_w << estimate_w2);
-    // Pack the two values, delimited by '|', into a string
+    // Pack the three values, delimited by '|', into a string
     std::ostringstream msg;
     char buffer [50];
     sprintf (buffer, "%.10f|%.10f|%.10f", initial_measurement, estimate_w, estimate_w2);
@@ -290,7 +291,7 @@ namespace ns3 {
     uint8_t *buffer = new uint8_t[packet->GetSize()];
     packet->CopyData (buffer, packet->GetSize());
     // Retrieve estimates of w and w^2 from the packet
-    // XXX: Magic incantations here 
+    // XXX: Magic incantations here, but it appears to work
     int i;
     char *p;
     char *array[3];
@@ -323,6 +324,7 @@ namespace ns3 {
     // Update variance estimate
     m_variance = m_estimate_w2 - (m_estimate_w * m_estimate_w);
 
+    // Log the update
     NS_LOG_INFO (
         Simulator::Now ().GetSeconds () // Time
         << " " << "UPDAT" // Updating estimates
@@ -336,6 +338,8 @@ namespace ns3 {
 
     m_neighbour_measurements[from] = initial_measurement;
 
+    // Iterate over stored neighbour measurements and update connectivity map using
+    // the updated variance estimate
     for(std::map<Ipv4Address, double>::iterator it = m_neighbour_measurements.begin(); it != m_neighbour_measurements.end(); ++it) {
       Ipv4Address neighbour = it->first;
       double y = it->second;
@@ -347,6 +351,7 @@ namespace ns3 {
         m_connectivity_map[neighbour] = false;
       }
 
+      // If this node's connectivity map has changed w.r.t. a neighbour, log the change
       if (m_connectivity_map[neighbour] != old_connectivity_decision) {
         NS_LOG_INFO (
             Simulator::Now ().GetSeconds () // Time
