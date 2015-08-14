@@ -116,6 +116,7 @@ namespace ns3 {
 
       Ipv4InterfaceContainer m_interfaces; //<! Neighbours' addresses
       Ipv4Address m_own_address; //<! This node's address
+      std::map<Ipv4Address, double> m_neighbour_measurements; // Neighbours' measurements
       std::map<Ipv4Address, bool> m_connectivity_map; //<! Connectivity decision map
 
       EventId m_sendEvent; //<! Event to send the next packet

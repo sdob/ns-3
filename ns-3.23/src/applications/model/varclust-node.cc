@@ -222,7 +222,7 @@ namespace ns3 {
           << " " << "ARECV" // Receiving on active thread
           << " " << Ipv4Address::ConvertFrom (m_own_address) // this node's address
           << " " << InetSocketAddress::ConvertFrom (from).GetIpv4 () // sender's address
-          << " " << std::setprecision(12) << boost::get<0>(data) // sender's m_estimate_w
+          << " " << std::setprecision(12) << boost::get<0>(data) // sender's initial_measurement
           << " " << std::setprecision(12) << boost::get<1>(data) // sender's m_estimate_w
           << " " << std::setprecision(12) << boost::get<2>(data) // sender's m_estimate_w2
           );
@@ -334,23 +334,29 @@ namespace ns3 {
         << " " << std::setprecision(12) << m_variance
         );
 
-    bool old_connectivity_decision = m_connectivity_map[from];
-    // update connectivity map
-    if (fabs(m_initial_measurement - initial_measurement) <= pow(m_variance, 0.5)) {
-      m_connectivity_map[from] = true;
-    } else {
-      m_connectivity_map[from] = false;
-    }
+    m_neighbour_measurements[from] = initial_measurement;
 
-    if (m_connectivity_map[from] != old_connectivity_decision) {
-      NS_LOG_INFO (
-          Simulator::Now ().GetSeconds () // Time
-          << " " << "CHANGE" // Changing connectivity decision
-          << " " << Ipv4Address::ConvertFrom (m_own_address) // this node's address
-          << " " << from // sender's address
-          << " " << old_connectivity_decision
-          << " " << m_connectivity_map[from]
-          );
+    for(std::map<Ipv4Address, double>::iterator it = m_neighbour_measurements.begin(); it != m_neighbour_measurements.end(); ++it) {
+      Ipv4Address neighbour = it->first;
+      double y = it->second;
+      bool old_connectivity_decision = m_connectivity_map[neighbour];
+      // update connectivity map
+      if (fabs(m_initial_measurement - y) <= pow(m_variance, 0.5)) {
+        m_connectivity_map[neighbour] = true;
+      } else {
+        m_connectivity_map[neighbour] = false;
+      }
+
+      if (m_connectivity_map[neighbour] != old_connectivity_decision) {
+        NS_LOG_INFO (
+            Simulator::Now ().GetSeconds () // Time
+            << " " << "CHANGE" // Changing connectivity decision
+            << " " << Ipv4Address::ConvertFrom (m_own_address) // this node's address
+            << " " << neighbour // sender's address
+            << " " << old_connectivity_decision
+            << " " << m_connectivity_map[neighbour]
+            );
+      }
     }
 
   }
