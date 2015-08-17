@@ -44,7 +44,7 @@ namespace ns3 {
           UintegerValue (100),
           MakeUintegerAccessor (&VarclustNode::m_count),
           MakeUintegerChecker<uint32_t> ())
-      .AddAttribute ("InitialDelay", "The initial estimate the node is holding",
+      .AddAttribute ("InitialDelay", "The offset from 0s when the node should start sending",
           DoubleValue (0.0),
           MakeDoubleAccessor (&VarclustNode::m_initial_delay),
           MakeDoubleChecker<double> ())
