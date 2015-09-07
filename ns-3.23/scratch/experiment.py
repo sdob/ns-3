@@ -90,11 +90,9 @@ def run_state(state, max_packets=500, max_runtime=1000, varclust_interval=1, csm
 
 if __name__ == '__main__':
     state = sys.argv[1]
+    max_packets = int(sys.argv[2])
+    max_runtime = int(sys.argv[3])
     data = get_state_data(state)
     save_out = sys.stdout
     save_err = sys.stderr
-    out_file = open('experiment-output/test.log', 'w')
-    sys.stdout = out_file
-    sys.stderr = out_file
-    run_state(state)
-    out_file.close()
+    run_state(state, max_packets=max_packets, max_runtime=max_runtime)
